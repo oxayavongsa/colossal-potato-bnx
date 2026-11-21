@@ -1,0 +1,34 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Driver — Colossal Potato</title>
+<style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#FBF4E4;color:#3A2716;padding:14px;max-width:640px;margin:0 auto}
+h1{font-size:20px;margin:4px 0 10px}.row{display:flex;gap:8px;margin-bottom:10px}select,input,button{font:inherit;font-size:15px;padding:10px;border-radius:10px;border:1.5px solid #d8c4a0;background:#fff}
+button{border:none;font-weight:700;cursor:pointer}.go{background:#2E5A37;color:#fff;flex:1}.st{background:#E9D6B4;color:#3A2716;flex:1}.stop{background:#a33;color:#fff;flex:1}
+#gps{font-size:13px;margin:6px 0 12px;color:#6B5440}.s{background:#fff;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:2px 3px 0 rgba(58,39,22,.15)}
+.s.d{opacity:.5}.s h3{margin:0 0 4px;font-size:16px}.s p{margin:2px 0;font-size:13px}.acts{display:flex;gap:8px;margin-top:8px}
+.acts a,.acts button{flex:1;text-align:center;text-decoration:none;padding:10px;border-radius:10px;font-weight:700;font-size:14px}
+.nav{background:#E9D6B4;color:#3A2716}.done{background:#D2642A;color:#fff}.undo{background:#ddd}</style></head>
+<body><h1>🚗 Colossal Potato — Driver</h1>
+<div class="row"><input type="date" id="date" style="flex:1"><select id="win" style="flex:1"><option value="am">9–11</option><option value="pm">2–4</option><option value="eve">7–9</option></select><button onclick="load()">↻</button></div>
+<div class="row"><button class="st" onclick="stg('prep')">1 · Prepping</button><button class="st" onclick="stg('cook')">2 · Cooking</button></div>
+<div class="row"><button class="go" id="start">3 · Out for delivery + GPS</button><button class="stop" id="end">End route</button></div>
+<div id="note" style="font-size:13px;color:#2E5A37;margin-bottom:6px"></div>
+<div id="gps">GPS off — customers can't see you yet.</div><div id="list"></div>
+<script>
+let KEY=localStorage.getItem("cpkey")||"";if(!KEY){KEY=prompt("Driver code")||"";localStorage.setItem("cpkey",KEY)}
+const $=s=>document.querySelector(s);const api=(p,b)=>fetch("/api/driver/"+p,{method:b?"POST":"GET",headers:{"x-key":KEY,"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined}).then(r=>r.json());
+const now=new Date();$("#date").value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
+const h=now.getHours();$("#win").value=h<13?"am":h<18?"pm":"eve";
+async function load(){const j=await api(`route?date=${$("#date").value}&win=${$("#win").value}`);
+ if(j.error){if(j.error.includes("code")){localStorage.removeItem("cpkey")}$("#list").textContent=j.error;return}
+ $("#list").innerHTML=j.stops.length?j.stops.map(s=>`<div class="s ${s.status==="delivered"?"d":""}"><h3>${s.seq}. ${s.name} · ${s.bowls} bowls ${s.stage?"<small style=\"color:#D2642A\">· "+s.stage+"</small>":""}</h3><p>${s.address}</p><p>📞 <a href="tel:${s.phone}">${s.phone}</a></p><p>${s.items.join("<br>")}</p>
+ <div class="acts"><a class="nav" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.address)}">Navigate</a>${s.status==="delivered"?`<button class="undo" onclick="act('undo','${s.id}')">Undo</button>`:`<button class="done" onclick="act('delivered','${s.id}')">Delivered ✓</button>`}</div></div>`).join(""):"No paid orders for this window yet."}
+async function act(a,id){await api(a,{id});load()}
+async function stg(s){const j=await api("stage",{date:$("#date").value,win:$("#win").value,stage:s});$("#note").textContent=j.error?j.error:`${s.toUpperCase()}: ${j.orders} customer(s) updated`+(j.sms?`, ${j.texted} texted`:" — texts off (add Twilio)");load()}
+let watch=null,lock=null,last=0;
+$("#start").onclick=async()=>{await api("start",{date:$("#date").value,win:$("#win").value});stg("ready");
+ if(!navigator.geolocation){$("#gps").textContent="This phone has no GPS access.";return}
+ try{lock=await navigator.wakeLock.request("screen")}catch(e){}
+ watch=navigator.geolocation.watchPosition(p=>{const t=Date.now();$("#gps").textContent=`📡 Sharing live location · ${new Date().toLocaleTimeString()} · keep this page open`;
+  if(t-last>12000){last=t;api("ping",{lat:p.coords.latitude,lng:p.coords.longitude})}},e=>$("#gps").textContent="GPS error: "+e.message,{enableHighAccuracy:true,maximumAge:5000});load()};
+$("#end").onclick=async()=>{if(watch!=null)navigator.geolocation.clearWatch(watch);watch=null;if(lock)lock.release();await api("stop",{});$("#gps").textContent="Route ended — GPS off."};
+["#date","#win"].forEach(s=>$(s).onchange=load);load();setInterval(()=>{if(watch!=null)load()},60000);
+</script></body></html>
