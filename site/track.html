@@ -1,0 +1,41 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Track your order — Colossal Potato</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>*{box-sizing:border-box}body{margin:0;font-family:Poppins,system-ui,sans-serif;color:#3A2716;background:#FBF4E4;height:100vh;display:flex;flex-direction:column}
+header{background:#3A2716;color:#FBF4E4;padding:12px 16px;font-weight:800;letter-spacing:.02em}header span{color:#E8A26A}
+#map{flex:1;min-height:300px}
+.sheet{background:#FBF4E4;border-radius:18px 18px 0 0;margin-top:-16px;position:relative;z-index:500;padding:18px 18px 22px;box-shadow:0 -4px 16px rgba(0,0,0,.15)}
+.eta{font-size:34px;font-weight:800;line-height:1}.eta small{font-size:15px;font-weight:500;color:#6B5440}
+.msg{font-size:17px;font-weight:700;color:#2E5A37;margin:6px 0}
+.bar{display:flex;gap:6px;margin:12px 0}.bar i{flex:1;height:6px;border-radius:4px;background:#E9D6B4}.bar i.on{background:#D2642A}
+.lbl{display:flex;justify-content:space-between;font-size:11px;color:#6B5440}
+.det{font-size:13px;color:#6B5440;margin-top:12px;border-top:1px dashed #d8c4a0;padding-top:10px}
+.car{font-size:30px;line-height:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4))}.home{font-size:28px;line-height:1}</style><link rel="icon" href="/img/logo.webp"></head>
+<body><header><img src="/img/logo.webp" alt="" style="width:30px;height:30px;border-radius:50%;vertical-align:middle;margin-right:8px">COLOSSAL <span>POTATO</span> · Live tracking</header><div id="map"></div>
+<div class="sheet"><div class="eta" id="eta">—</div><div class="msg" id="msg">Loading your order…</div>
+<div class="bar"><i id="s1"></i><i id="s2"></i><i id="s3"></i><i id="s4"></i><i id="s5"></i></div>
+<div class="lbl"><span>Confirmed</span><span>Prepping</span><span>Cooking</span><span>On the way</span><span>Delivered</span></div>
+<div class="det" id="det"></div></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const T="__TOKEN__";const map=L.map("map",{zoomControl:false}).setView([38.58,-121.49],11);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+const ic=(e,c)=>L.divIcon({html:`<div class="${c}">${e}</div>`,className:"",iconSize:[32,32],iconAnchor:[16,16]});
+let home,car,fitted=false;
+function stage(n){["s1","s2","s3","s4","s5"].forEach((s,i)=>document.getElementById(s).classList.toggle("on",i<n))}
+async function tick(){try{const j=await (await fetch("/api/track/"+T)).json();
+ if(j.error){document.getElementById("msg").textContent=j.error;return}
+ if(!home){home=L.marker([j.me.lat,j.me.lng],{icon:ic("🏠","home")}).addTo(map);map.setView([j.me.lat,j.me.lng],13)}
+ const E=document.getElementById("eta"),M=document.getElementById("msg");M.textContent=j.msg;
+ const S={pending:0,scheduled:1,prep:2,cook:3,ready:4,packing:4,enroute:4,delivered:5};stage(S[j.stage]??1);
+ if(j.stage==="enroute"){E.innerHTML=`${j.etaMins} min <small>· arriving ~${new Date(Date.now()+j.etaMins*60000).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</small>`}
+ else if(j.stage==="delivered"){E.textContent="Delivered ✓"}
+ else if(j.stage==="packing"){E.innerHTML=`${j.etaMins} min <small>estimated</small>`}
+ else{E.innerHTML=`${j.window}<br><small>${new Date(j.date+"T12:00:00").toLocaleDateString([],{weekday:"long",month:"short",day:"numeric"})}</small>`}
+ if(j.car){if(!car)car=L.marker([j.car.lat,j.car.lng],{icon:ic("🚗","car")}).addTo(map);else car.setLatLng([j.car.lat,j.car.lng]);
+  if(!fitted){map.fitBounds(L.latLngBounds([[j.car.lat,j.car.lng],[j.me.lat,j.me.lng]]).pad(.3));fitted=true}}
+ else if(car){map.removeLayer(car);car=null}
+ document.getElementById("det").innerHTML=`<b>${j.name}'s order</b> · ${j.bowls} bowls<br>${j.items.join("<br>")}`;
+}catch(e){}}
+tick();setInterval(tick,15000);
+</script></body></html>
